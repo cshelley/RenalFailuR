@@ -5,7 +5,7 @@ date: "2026-07-14"
 output: html_document
 ---
 
-```{r sessionSetup, echo = FALSE, message = FALSE}
+```{r sessionSetup}
 library(here)
 ```
 

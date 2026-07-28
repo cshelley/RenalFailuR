@@ -7,6 +7,7 @@ output: html_document
 
 ```{r sessionSetup, echo = FALSE, message = FALSE}
 library(here)
+date = Sys.Date()
 ```
 
 ### INTRODUCTION
@@ -42,7 +43,7 @@ chronic_kidney_disease <- fetch_ucirepo(name = "Chronic Kidney Disease")
 # Save a bronze version as a JSON file
 str(chronic_kidney_disease)
 write_json(chronic_kidney_disease, 
-           path = "chronic_kidney_disease_bronze_07292026.json", pretty = TRUE)
+           path = here("data", paste0("ckd_bronze_", date, ".json")), pretty = TRUE)
 
 # Follow UCI MLR website instructions to construct dataset
 ckd_data = chronic_kidney_disease$data
@@ -182,7 +183,9 @@ ckd$classification[ckd$classification == "ckd\t"] <- "ckd"
 unique(ckd$classification)      # test that all values are "ckd" or "notckd"
 
 # Save a silver file as a .csv
-write.csv(ckd, file = "chronic_kidney_disease_silver_07292026.csv")
+write.csv(ckd, 
+          file = here("data", 
+                      paste0("ckd_silver_", date, ".csv")))
 ```
 
 ## RESULTS
@@ -304,7 +307,7 @@ An alternative way of expressing this relationship is in terms of the log odds a
 
 $$log\left(\frac{p_x}{1-p_x} \right) = log(\text{odds for D|X = x}) = a + bx.$$
 
-```{r load_to_gold}
+```{r load_to_gold, include = FALSE}
 
 ckd$outcome = ckd$classification
 ckd$outcome[ckd$outcome == "ckd"] <- 1

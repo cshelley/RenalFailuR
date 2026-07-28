@@ -1,0 +1,325 @@
+---
+title: '"Chronic Kidney Disease"'
+author: "Courtney D. Shelley, PhD"
+date: "2026-07-14"
+output: html_document
+---
+
+```{r sessionSetup, echo = FALSE, message = FALSE}
+library(here)
+date = Sys.Date()
+```
+
+### INTRODUCTION
+
+This demo analysis will explore the Chronic Kidney Disease dataset [doi:
+10.24432/C5G020](https://archive.ics.uci.edu/dataset/336/chronic+kidney+disease) available from the UC Irvine Machine Learning Repository. The dataset consists of 400 observations on 24 features, disease status, and an ID variable and can be used to predict chronic kidney disease in hospitalized patients. 
+
+The 24 features include: 
+
+* age		-	age	
+* bp		-	blood pressure
+* sg		-	specific gravity
+
+### METHODOLOGY
+
+#### Data Cleaning and Processing
+
+Data was downloaded from the UCI Machine Learning Repository website as a .csv file. The dataset dimensions were verified. 
+
+```{r extract_to_bronze, include = FALSE}
+## EXTRACT DATASET
+# why:  Extract dataset from UCI Machine Learning Repository and archive
+# what: Input dataset name. Output bronze dataset.
+# how:  fetch_ucirepo()    # downloads dataset and metadata
+
+#install.packages("ucimlrepo", repos = c('https://coatless-rpkg.r-universe.dev', 'https://cloud.r-project.org'))
+
+library(ucimlrepo)
+library(jsonlite)
+
+chronic_kidney_disease <- fetch_ucirepo(name = "Chronic Kidney Disease")
+
+# Save a bronze version as a JSON file
+str(chronic_kidney_disease)
+write_json(chronic_kidney_disease, 
+           path = here("data", paste0("ckd_bronze_", date, ".json")), pretty = TRUE)
+
+# Follow UCI MLR website instructions to construct dataset
+ckd_data = chronic_kidney_disease$data
+X = ckd_data$features
+Y = ckd_data$targets
+
+ckd = cbind(X, Y)
+class(ckd)  # test that class equals "data.frame"
+
+dim(ckd)    # test that dimensions equals (400   25)
+```
+
+To prepare data for analysis, we first use pseudocode to explicitly state the data transformation pipeline with human-readable goals. 
+
+```{r transform_to_silver1, include = FALSE}
+# CLEAN CODE
+# why:  Ensure informative variable names.
+# what: Input a vector of column names. Output a vector of column names.
+# how:  View names and replace if confusing
+
+# why:  Ensure accurate variable values.
+# what: Input a vector of column values. Output a vector of column values.
+# how:  View and handle missingness
+#       Ensure variable classes are accurate
+#       Check category labels
+```
+
+We next transform our pseudocode by identifying base R functions that can perform our necessary steps. 
+
+```{r transform_to_silver2, include = FALSE}
+# CLEAN CODE
+# why:  Ensure informative variable names.
+# what: Input a vector of column names. Output a vector of column names.
+# how:  names()     # view names
+#       colnames()  # replace names
+
+# why:  Ensure accurate variable values.
+# what: Input a vector of column values. Output a vector of column values.
+# how:  apply() + perc_missingness # view rows/columns to handle missingness
+#       class()                    # assess class accuracy
+#       unique()                   # labels
+```
+
+We next performed the transformations and tested code at each step. In Step 1, we adjust coded names into fully readable names. 
+
+```{r transform_to_silver3, include = FALSE}
+# CLEAN CODE
+# why:  Ensure informative variable names.
+# what: Input a vector of column names. Output a vector of column names.
+# how:  names()     # view names
+#       colnames()  # replace names
+
+names(ckd)
+colnames(ckd) <- c("age", "blood_pressure", "specific_gravity", "albumin",
+                   "sugar", "red_blood_cells", "pus_cell", "pus_cell_clumps",
+                   "bacteria", "blood_glucose_random", "blood_urea", 
+                   "serum_creatinine", "sodium", "potassium", "hemoglobin",
+                   "packed_cell_volume", "white_blood_cell_count",
+                   "red_blood_cell_count", "hypertension", "diabetes_mellitus",
+                   "coronary_artery_disease", "appetite", "pedal_adema",
+                   "anemia", "classification")
+names(ckd) # test that names changed to long_form
+```
+In Step 2, we remove columns with a high level of missingness and verify that this was correctly performed. 
+
+```{r transform_to_silver4, include = FALSE}
+# CLEAN CODE
+# why: ensure data accuracy
+# what: clean_values()
+# how: apply() + perc_missingness # view rows/columns to handle missingness
+
+apply(ckd, 1, function(x) round(sum(is.na(x))/length(x)*100, 2))
+apply(ckd, 2, function(x) round(sum(is.na(x))/length(x)*100, 2))
+
+dim(ckd)
+(which_sodium_potassium <- c(which(names(ckd) == "sodium"), which(names(ckd) == "potassium")))
+ckd <- ckd[,-which_sodium_potassium]
+ncol(ckd)   # test that we removed two columns
+
+# handle missingness
+sum(is.na(ckd))
+ckd[ckd == ""] <- NA
+sum(is.na(ckd))   # test that we increased number of NAs
+```
+
+In Step 3, we ensure data accuracy including recoding of some numeric variables to accurately reflect their variable type.
+
+```{r transform_to_silver5, include = FALSE}
+# CLEAN CODE
+# why: ensure data accuracy
+# what: clean_values()
+# how: class()                    # assess class accuracy
+
+str(ckd)
+
+# $packed_cell_volume     : chr  "44" "38" "31" "32" ...
+class(ckd$packed_cell_volume)
+ckd$packed_cell_volume <- as.numeric(ckd$packed_cell_volume)
+class(ckd$packed_cell_volume)     # test that class equals "numeric"
+
+# $white_blood_cell_count : chr  "7800" "6000" "7500" "6700" ...
+class(ckd$white_blood_cell_count)
+ckd$white_blood_cell_count <- as.numeric(ckd$white_blood_cell_count)
+class(ckd$white_blood_cell_count)  # test that class equals "numeric" 
+
+# $$red_blood_cell_count   : chr  "5.2" "" "" "3.9" ...   
+class(ckd$red_blood_cell_count)
+ckd$red_blood_cell_count <- as.numeric(ckd$red_blood_cell_count)
+class(ckd$red_blood_cell_count)    # test that class equals "numeric" 
+```
+
+In Step 4, we replace variable value typos to ensure ensure accurate category labels. 
+
+```{r transform_to_silver6, include = FALSE}
+# CLEAN CODE
+# why: ensure data accuracy
+# what: clean_values()
+# how: unique()                   # labels
+
+apply(ckd, 2, unique)
+
+# $diabetes_mellitus        [1] "yes"   "no"    " yes"  "\tno"  "\tyes" NA 
+unique(ckd$diabetes_mellitus)
+ckd$diabetes_mellitus[ckd$diabetes_mellitus == " yes"] <- "yes"
+ckd$diabetes_mellitus[ckd$diabetes_mellitus == "\tno"] <- "no"
+ckd$diabetes_mellitus[ckd$diabetes_mellitus == "\tyes"] <- "yes"
+unique(ckd$diabetes_mellitus)   # test that all values are "yes", "no", or NA
+
+# $coronary_artery_disease  [1] "no"   "yes"  "\tno" NA 
+unique(ckd$coronary_artery_disease)
+ckd$coronary_artery_disease[ckd$coronary_artery_disease == "\tno"] <- "no"
+unique(ckd$coronary_artery_disease)  # test that all values are "yes", "no", or NA
+
+# $classification           [1] "ckd"    "ckd\t"  "notckd"
+unique(ckd$classification)
+ckd$classification[ckd$classification == "ckd\t"] <- "ckd"
+unique(ckd$classification)      # test that all values are "ckd" or "notckd"
+
+# Save a silver file as a .csv
+write.csv(ckd, 
+          file = here("data", 
+                      paste0("ckd_silver_", date, ".csv")))
+```
+
+## RESULTS
+
+Our complete research workflow is presented below:
+```{r mermaid1, echo = FALSE}
+library(DiagrammeR)
+
+mermaid("
+        graph LR   
+          A[Bronze] --> B[Silver]
+          B --> C[Analysis]
+          C --> E[Table]
+          B --> D[Gold]
+          C --> D
+          D --> F[DAG]
+          D --> G[Model]
+          F --> H[Results]
+        style A fill:#E68C47,stroke:#333,stroke-width:2px
+        style B fill:#C9BFBD,stroke:#333,stroke-width:2px
+        style D fill:#F2CB2E,stroke:#333,stroke-width:2px
+        
+        style E fill:#94F4D3,stroke:#333,stroke-width:2px
+        style F fill:#94F4D3,stroke:#333,stroke-width:2px
+        style G fill:#94F4D3,stroke:#333,stroke-width:2px
+")
+```
+
+_Table 1: Comparability of Study Groups_
+
+```{r gt_table, echo = FALSE, message = FALSE, warning = FALSE}
+# CREATE TABLE 1
+# why:  Summarize disease group comparability in a table 
+# what: Input a prepared data.frame. Output a table.
+# how:  
+
+
+library(dplyr)
+library(gt)
+means <- ckd |>
+            group_by(classification) |>
+            summarize(across(where(is.numeric), list(mean = ~mean(.x, na.rm = TRUE))))
+
+sds <- ckd |>
+  group_by(classification) |>
+  summarize(across(where(is.numeric), ~sd(.x, na.rm = TRUE))) 
+
+ns <- ckd |>
+          group_by(classification) |>
+          summarize(across(where(is.numeric), list(n = ~sum(!is.na(.x)))))
+
+names <- sub("_mean", "", names(means))
+table1 = data.frame(Variable = names,
+                    Mean_ckd = as.numeric(means[1,]),
+                    sd_ckd = -as.numeric(sds[1,]),
+                    n_ckd = as.numeric(ns[1,]),
+                    perc_ckd = as.numeric(ns[1,])/sum(as.numeric(ns[1,]), na.rm = TRUE),
+                    Mean_nockd = as.numeric(means[2,]),
+                    sd_nockd = -as.numeric(sds[2,]),
+                    n_nockd = as.numeric(ns[2,]), 
+                    perc_nockd = as.numeric(ns[2,])/sum(as.numeric(ns[2,]), na.rm = TRUE))
+
+table1 <- table1[3:14,]
+
+table1 |> 
+  gt() |>
+    tab_header(
+    title = md("**Table 1: Laboratory Value Comparisons**"),
+    subtitle = "Chronic Kidney Disease (CKD) Patients and Non-CKD Patients") |>
+    tab_stubhead(
+      label = "Variable") |>
+    tab_spanner(
+      label = "Chronic Kidney Disease",
+      columns = c(Mean_ckd, sd_ckd, n_ckd, perc_ckd)) |>
+    tab_spanner(
+      label = "No Disease",
+      columns = c(Mean_nockd, sd_nockd, n_nockd, perc_nockd)) |>
+    cols_label(
+      Mean_ckd = html("Mean"),
+      sd_ckd = html("sd"),
+      n_ckd = html("n"),
+      perc_ckd = html("(%)"),
+      Mean_nockd = html("Mean"),
+      sd_nockd = html("sd"),
+      n_nockd = html("n"), 
+      perc_nockd = html("(%)")) |>
+  tab_style(
+    style = cell_borders(
+      sides = "left", 
+      weight = px(1)), 
+    locations = cells_body(
+      columns = Mean_nockd)) |>
+  tab_style(
+    style = cell_borders(
+      sides = "left",
+      weight = px(2)), 
+    locations = cells_body(
+      columns = Mean_ckd)) |>
+  tab_style(
+    style = cell_text(style = "italic"),
+    locations = cells_body(columns = c(sd_ckd, sd_nockd))) |>
+   fmt_number(
+    columns = c(Mean_ckd, sd_ckd, perc_ckd, Mean_nockd, sd_nockd, perc_nockd),
+    decimals = 2) |>
+  fmt_percent(
+    columns = c(perc_ckd, perc_nockd)) |>
+  fmt_number(
+    columns = c(sd_ckd, sd_nockd),
+    accounting = TRUE)
+```
+
+
+#### Analysis
+
+We first examine a simple logistic regression model of the form: 
+
+$$p_x = P(D|X = x) = \frac{1}{1+e^{-(a + bx)}}. $$
+An alternative way of expressing this relationship is in terms of the log odds associated with $p_x$ as follows: 
+
+$$log\left(\frac{p_x}{1-p_x} \right) = log(\text{odds for D|X = x}) = a + bx.$$
+
+```{r load_to_gold, include = FALSE}
+
+ckd$outcome = ckd$classification
+ckd$outcome[ckd$outcome == "ckd"] <- 1
+ckd$outcome[ckd$outcome == "notckd"] <- 0
+ckd$outcome <- as.numeric(ckd$outcome)
+
+# Fit the model
+glm1 <- glm(outcome ~ serum_creatinine, data = ckd, 
+            family = binomial)
+summary(glm1)
+
+creat_est = glm1$coef[[2]]
+```
+
+A model fitting ckd or no ckd as outcome with serum creatinine as predictor yields an estimate of `r creat_est` or an odds ratio of `r round(exp(creat_est), 3)`. 

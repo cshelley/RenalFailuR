@@ -1,47 +1,18 @@
-```{r sessionSetup, echo = FALSE, message = FALSE}
-library(here)
-```
-
-
-## ORIGINAL
-```{r extract_to_bronze, include = FALSE}
-## EXTRACT DATASET
-# why:  Extract dataset from UCI Machine Learning Repository and archive
-# what: Input dataset name. Output bronze dataset.
-# how:  fetch_ucirepo()    # downloads dataset and metadata
-
-#install.packages("ucimlrepo", repos = c('https://coatless-rpkg.r-universe.dev', 'https://cloud.r-project.org'))
-
-library(ucimlrepo)
-library(jsonlite)
-
-chronic_kidney_disease <- fetch_ucirepo(name = "Chronic Kidney Disease")
-
-# Save a bronze version as a JSON file
-str(chronic_kidney_disease)
-write_json(chronic_kidney_disease,
-           path = here("data", paste0("ckd_bronze_", date, ".json")), pretty = TRUE)
-
-# Follow UCI MLR website instructions to construct dataset
-ckd_data = chronic_kidney_disease$data
-X = ckd_data$features
-Y = ckd_data$targets
-
-ckd = cbind(X, Y)
-class(ckd)  # test that class equals "data.frame"
-
-dim(ckd)    # test that dimensions equals (400   25)
-```
-
-
 # Dependencies
-library(ucimlrepo)
-library(jsonlite)
+library(ucimlrepo) # extract_to_bronze()
+library(jsonlite)  # extract_to_bronze()
+library(dplyr)     # create_gt_table()
+library(gt)        # create_gt_table()
 
-#----------- extract_to_bronze() --------------#
-# why:  Extract dataset from UCI Machine Learning Repository and archive
-# what: Input dataset name. Output bronze dataset.
 
+
+#' Extract dataset from UCI Machine Learning Repository and archive
+#'
+#' @param name A string. References a dataset downloadable from UCI machine
+#' learning repository
+#' @returns A dataset, which is a subset of input list
+#' @examples
+#' extract_to_bronze('Chronic Kidney Disease')
 extract_to_bronze <- function(name) {
   mlr_data <- fetch_ucirepo(name = name)
 
@@ -54,23 +25,42 @@ extract_to_bronze <- function(name) {
   return(dataset)
 }
 
-# example
-extract_to_bronze("Chronic Kidney Disease")
 
 # unit test for extract_to_bronze
 class(ckd)  # test that class equals "data.frame"
 dim(ckd)    # test that dimensions equals (400   25)
 
-# Save a bronze version as a JSON file
-write_json(datafile,
-            path = here("data", paste0("ckd_bronze_", date, ".json")), pretty = TRUE)
 
 
 
-#------------ transform_to_silver() ----------------#
-# why:  Ensure informative variable names and accurate data values
-# what: Input a vector of column names. Output a vector of column names.
+#' Save a bronze dataset as a JSON file
+#'
+#' @param datafile A data.frame
+#' @returns A .json file downloaded to /RenalFailuR/data
+#' @example
+#' bronze_file <- extract_to_bronze('Chronic Kidney Disease')
+#' bronze_to_json(bronze_file)
+bronze_to_json <- function(datafile) {
+  write_json(datafile,
+             path = system.file("data",
+                                paste0("ckd_bronze_", date, ".json")),
+             pretty = TRUE)
+}
 
+
+
+#' Ensure informative variable names and accurate data values
+#'
+#' `transform_to_silver()` removed two columns ("sodium" and "potassium") due
+#' to excessive missingness (> 20%), replaces encoded variable names with
+#' human-readable names, cleans variable values, and standardizes missing values
+#' to NA.
+#'
+#' @param datafile A data.frame derived from `extract_to_bronze()` function.
+#' @returns A data.frame with two columns removed compared to input.
+#' @example
+#' bronze_data <- extract_to_bronze("Chronic Kidney Disease")
+#' transform_to_silver(bronze_data)
 transform_to_silver <- function(datafile) {
   # transform names
   colnames(datafile) <- c("age", "blood_pressure", "specific_gravity",
@@ -107,9 +97,6 @@ transform_to_silver <- function(datafile) {
   return(data)
 }
 
-# example
-bronze_data <- extract_to_bronze("Chronic Kidney Disease")
-transform_to_silver(bronze_data)
 
 # unit tests for transform_to_silver()
 names(ckd) # test that names changed to long_form
@@ -123,113 +110,105 @@ unique(ckd$coronary_artery_disease)  # test that all values are "yes", "no", or 
 unique(ckd$classification)      # test that all values are "ckd" or "notckd"
 
 
-# Save a silver file as a .csv
-write.csv(ckd,
-          file = here("data",
-                      paste0("ckd_silver_", date, ".csv")))
-```
+#' Save a silver dataset as a CSV file
+#'
+#' @param datafile A data.frame derived from transform_to_silver()
+#' @returns A .csv file downloaded to /RenalFailuR/data
+#' @example
+#' silver_data <- extract_to_bronze("Chronic Kidney Disease") |>
+#'   silver_to_csv()
+silver_to_csv <- function(datafile) {
+  write.csv(datafile,
+            file = system.file("data",
+                               paste0("ckd_silver_", date, ".csv")))
+}
+
+
+#' Create a numeric dichotomous outcome variable for use in a logistic
+#' regression (glm) model
+#'
+#' `load_to_gold()` derives a 0/1 outcome variable from "classification", with
+#' 0 = "nockd", no disease and 1 = "ckd", disease.
+#'
+#' @param datafile A data.frame derived from `transform_to_silver()` function.
+#' @returns A data.frame with a new column, "outcome" with 0/1 values.
+#' @example
+#' bronze_data <- extract_to_bronze("Chronic Kidney Disease") |>
+#'  transform_to_silver() |>
+#'  load_to_gold()
+load_to_gold <- function(dataset) {
+  dataset$outcome = dataset$classification
+  dataset$outcome[dataset$outcome == "ckd"] <- 1
+  dataset$outcome[dataset$outcome == "notckd"] <- 0
+  dataset$outcome <- as.numeric(dataset$outcome)
+
+  return(dataset)
+}
+
+
+# unit tests for laod_to_gold()
+sum(gold$outcome)    # test that ckd cases equals 250
 
 
 
-
-```{r load_to_gold, include = FALSE}
-
-ckd$outcome = ckd$classification
-ckd$outcome[ckd$outcome == "ckd"] <- 1
-ckd$outcome[ckd$outcome == "notckd"] <- 0
-ckd$outcome <- as.numeric(ckd$outcome)
-
-# Fit the model
-glm1 <- glm(outcome ~ serum_creatinine, data = ckd,
-            family = binomial)
-summary(glm1)
-
-creat_est = glm1$coef[[2]]
-```
-
+#' Save a gold file as a csv
+#'
+#' @param dataset A data.frame derived from load_to_gold() function.
+#' @returns A .csv file saved to /RenalFailuR/data.
+#' @example
+#' bronze_data <- extract_to_bronze("Chronic Kidney Disease") |>
+#'  transform_to_silver() |>
+#'  load_to_gold() |>
+#'  gold_to_csv()
+gold_to_csv <- function(dataset) {
+  write.csv(datafile,
+            file = system.file("data",
+                               paste0("ckd_gold_", date, ".csv")))
+}
 
 
+#------------- create_gt_table() ---------------#
+#' Summarize disease group comparability in a table
+#'
+#' Creates a table comparing variable means, sds, and number of non-missing
+#' observations for numeric variables in a silver or gold datafile.
+#'
+#' @param A data.frame derived from transform_to_silver() or load_to_gold()
+#' functions
+#' @returns A table suitable for gt() function
+#' @example
+#' silver_data <- extract_to_bronze("Chronic Kidney Disease") |>
+#'  transform_to_silver()
+#' create_gt_table(silver_data)
+create_gt_table <- function(datafile) {
+  means <- datafile |>
+    group_by(classification) |>
+    summarize(across(where(is.numeric), list(mean = ~mean(.x, na.rm = TRUE))))
 
-```{r gt_table, echo = FALSE, message = FALSE, warning = FALSE}
-# CREATE TABLE 1
-# why:  Summarize disease group comparability in a table
-# what: Input a prepared data.frame. Output a table.
-# how:
+  sds <- datafile |>
+    group_by(classification) |>
+    summarize(across(where(is.numeric), ~sd(.x, na.rm = TRUE)))
 
+  ns <- datafile |>
+    group_by(classification) |>
+    summarize(across(where(is.numeric), list(n = ~sum(!is.na(.x)))))
 
-library(dplyr)
-library(gt)
-means <- ckd |>
-            group_by(classification) |>
-            summarize(across(where(is.numeric), list(mean = ~mean(.x, na.rm = TRUE))))
+  names <- sub("_mean", "", names(means))
+  table = suppressWarnings(
+    data.frame(Variable = names,
+               Mean_ckd = as.numeric(means[1,]),
+               sd_ckd = -as.numeric(sds[1,]),
+               n_ckd = as.numeric(ns[1,]),
+               perc_ckd = as.numeric(ns[1,])/sum(as.numeric(ns[1,]), na.rm = TRUE),
+               Mean_nockd = as.numeric(means[2,]),
+               sd_nockd = -as.numeric(sds[2,]),
+               n_nockd = as.numeric(ns[2,]),
+               perc_nockd = as.numeric(ns[2,])/sum(as.numeric(ns[2,]), na.rm = TRUE))
+  )
+  table <- table[3:14,]
 
-sds <- ckd |>
-  group_by(classification) |>
-  summarize(across(where(is.numeric), ~sd(.x, na.rm = TRUE)))
-
-ns <- ckd |>
-          group_by(classification) |>
-          summarize(across(where(is.numeric), list(n = ~sum(!is.na(.x)))))
-
-names <- sub("_mean", "", names(means))
-table1 = data.frame(Variable = names,
-                    Mean_ckd = as.numeric(means[1,]),
-                    sd_ckd = -as.numeric(sds[1,]),
-                    n_ckd = as.numeric(ns[1,]),
-                    perc_ckd = as.numeric(ns[1,])/sum(as.numeric(ns[1,]), na.rm = TRUE),
-                    Mean_nockd = as.numeric(means[2,]),
-                    sd_nockd = -as.numeric(sds[2,]),
-                    n_nockd = as.numeric(ns[2,]),
-                    perc_nockd = as.numeric(ns[2,])/sum(as.numeric(ns[2,]), na.rm = TRUE))
-
-table1 <- table1[3:14,]
-
-table1 |>
-  gt() |>
-    tab_header(
-    title = md("**Table 1: Laboratory Value Comparisons**"),
-    subtitle = "Chronic Kidney Disease (CKD) Patients and Non-CKD Patients") |>
-    tab_stubhead(
-      label = "Variable") |>
-    tab_spanner(
-      label = "Chronic Kidney Disease",
-      columns = c(Mean_ckd, sd_ckd, n_ckd, perc_ckd)) |>
-    tab_spanner(
-      label = "No Disease",
-      columns = c(Mean_nockd, sd_nockd, n_nockd, perc_nockd)) |>
-    cols_label(
-      Mean_ckd = html("Mean"),
-      sd_ckd = html("sd"),
-      n_ckd = html("n"),
-      perc_ckd = html("(%)"),
-      Mean_nockd = html("Mean"),
-      sd_nockd = html("sd"),
-      n_nockd = html("n"),
-      perc_nockd = html("(%)")) |>
-  tab_style(
-    style = cell_borders(
-      sides = "left",
-      weight = px(1)),
-    locations = cells_body(
-      columns = Mean_nockd)) |>
-  tab_style(
-    style = cell_borders(
-      sides = "left",
-      weight = px(2)),
-    locations = cells_body(
-      columns = Mean_ckd)) |>
-  tab_style(
-    style = cell_text(style = "italic"),
-    locations = cells_body(columns = c(sd_ckd, sd_nockd))) |>
-   fmt_number(
-    columns = c(Mean_ckd, sd_ckd, perc_ckd, Mean_nockd, sd_nockd, perc_nockd),
-    decimals = 2) |>
-  fmt_percent(
-    columns = c(perc_ckd, perc_nockd)) |>
-  fmt_number(
-    columns = c(sd_ckd, sd_nockd),
-    accounting = TRUE)
-```
+  return(table)
+}
 
 
 

@@ -1,11 +1,3 @@
-# Dependencies
-library(ucimlrepo) # extract_to_bronze()
-library(jsonlite)  # extract_to_bronze()
-library(dplyr)     # create_gt_table()
-library(gt)        # create_gt_table()
-
-
-
 #' Extract dataset from UCI Machine Learning Repository and archive
 #'
 #' @param name A string. References a dataset downloadable from UCI machine
@@ -29,6 +21,7 @@ extract_to_bronze <- function(name) {
 # unit test for extract_to_bronze
 class(ckd)  # test that class equals "data.frame"
 dim(ckd)    # test that dimensions equals (400   25)
+
 
 
 
